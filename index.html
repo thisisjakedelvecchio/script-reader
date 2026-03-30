@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Script Reader">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Script Reader — In The Zone Studios</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Courier New', monospace;
+  background: #111; color: #eee;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 36px 20px 60px;
+}
+
+.brand { text-align: center; margin-bottom: 32px; }
+.brand-sub { font-size: 0.62rem; letter-spacing: 0.38em; text-transform: uppercase; color: #555; margin-bottom: 7px; }
+.brand-title { font-size: 1.6rem; letter-spacing: 0.22em; text-transform: uppercase; color: #f5c518; font-weight: bold; text-shadow: 0 0 30px rgba(245,197,24,0.25); }
+.brand-line { width: 60px; height: 1px; background: #f5c518; margin: 10px auto 0; opacity: 0.35; }
+
+.panel { width: 100%; max-width: 720px; background: #1a1a1a; border: 1px solid #262626; border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+.panel-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; cursor: pointer; border-bottom: 1px solid #222; user-select: none; }
+.panel-header:hover { background: #1f1f1f; }
+.panel-title-text { font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase; color: #666; }
+.panel-arrow { color: #444; font-size: 0.75rem; transition: transform 0.2s; }
+.panel-arrow.open { transform: rotate(180deg); }
+.panel-body { padding: 18px 20px; }
+.panel-body.collapsed { display: none; }
+
+input[type="text"], input[type="number"], select {
+  background: #111; border: 1px solid #2e2e2e; color: #eee;
+  padding: 9px 12px; border-radius: 4px;
+  font-family: inherit; font-size: 0.83rem;
+}
+input:focus, select:focus { outline: none; border-color: #f5c518; }
+input[type="text"] { width: 100%; }
+.row { display: flex; gap: 10px; align-items: center; }
+.row input { flex: 1; }
+
+button {
+  background: #222; color: #eee; border: 1px solid #3a3a3a;
+  padding: 9px 16px; border-radius: 4px; cursor: pointer;
+  font-family: inherit; font-size: 0.75rem;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  transition: background 0.15s; white-space: nowrap;
+}
+button:hover:not(:disabled) { background: #2e2e2e; }
+button:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-gold { background: #f5c518; color: #111; border-color: #f5c518; font-weight: bold; }
+.btn-gold:hover:not(:disabled) { background: #e0b010; }
+.btn-gold:disabled { background: #444; color: #777; border-color: #444; }
+
+.hint { font-size: 0.7rem; color: #3e3e3e; margin-top: 6px; }
+.saved-badge { font-size: 0.65rem; color: #6bff9e; margin-left: 8px; display: none; }
+
+#upload-area {
+  border: 2px dashed #2a2a2a; border-radius: 6px;
+  padding: 40px; text-align: center; cursor: pointer;
+  transition: border-color 0.2s; font-size: 0.85rem; color: #666;
+}
+#upload-area:hover, #upload-area.drag-over { border-color: #555; color: #999; }
+#upload-area .icon { font-size: 2rem; margin-bottom: 10px; }
+#upload-area p { font-size: 0.72rem; margin-top: 6px; color: #444; }
+#file-input { display: none; }
+
+/* VOICE ASSIGNMENTS */
+.voices-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 300px; overflow-y: auto; padding-right: 4px; }
+.voice-row { display: flex; align-items: center; gap: 8px; background: #111; border: 1px solid #1e1e1e; border-radius: 4px; padding: 7px 10px; }
+.char-name { font-size: 0.7rem; font-weight: bold; letter-spacing: 0.05em; color: #f5c518; min-width: 80px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.char-gender { font-size: 0.6rem; padding: 2px 6px; border-radius: 10px; flex-shrink: 0; }
+.char-gender.M { background: #1a2a3a; color: #6aacff; }
+.char-gender.F { background: #2a1a2a; color: #ff9de2; }
+.char-gender.N { background: #1e1e1e; color: #888; }
+.char-lines { font-size: 0.6rem; color: #333; min-width: 24px; text-align: right; flex-shrink: 0; }
+.voice-row select { flex: 1; font-size: 0.7rem; padding: 5px 7px; background: #0d0d0d; }
+.narrator-row { background: #151515; border: 1px solid #2a2a2a; border-radius: 4px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.narrator-label { font-size: 0.68rem; letter-spacing: 0.1em; color: #888; text-transform: uppercase; min-width: 80px; }
+.narrator-row select { flex: 1; font-size: 0.78rem; padding: 6px 10px; background: #0d0d0d; }
+.auto-badge { font-size: 0.6rem; background: #1a2a1a; color: #6bff9e; border: 1px solid #2a4a2a; padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
+.reassign-btn { font-size: 0.65rem; padding: 5px 10px; margin-top: 10px; }
+
+/* NAV BAR */
+#nav-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 12px 20px; border-bottom: 1px solid #1e1e1e; background: #161616; }
+#scene-select { flex: 1; min-width: 180px; font-size: 0.75rem; padding: 7px 10px; }
+.page-jump { display: flex; gap: 6px; align-items: center; }
+.page-jump input { width: 58px; padding: 7px 8px; text-align: center; font-size: 0.8rem; }
+#nav-bar button { padding: 7px 12px; font-size: 0.7rem; }
+
+#script-display {
+  height: 400px; overflow-y: auto;
+  padding: 24px 52px;
+  font-size: 13px; line-height: 1.65;
+  font-family: 'Courier New', Courier, monospace;
+  scroll-behavior: smooth;
+}
+.seg { border-radius: 2px; transition: background 0.15s; cursor: pointer; }
+.seg:hover { background: #1a1a1a; }
+.seg.active { background: #1e1a00; border-left: 2px solid #f5c518; padding-left: 6px; }
+
+.seg-scene { color: #f5c518; font-weight: bold; text-transform: uppercase;
+  padding: 2px 0; margin-top: 18px; margin-bottom: 2px; }
+.seg-action { color: #bbb; padding: 1px 0; margin-bottom: 1px; }
+.seg-dialogue-block { margin-top: 4px; margin-bottom: 4px; padding: 2px 4px; }
+.seg.active.seg-dialogue-block { border-left: 2px solid #f5c518; padding-left: 6px; }
+
+.seg-char-label {
+  display: block;
+  padding-left: 37%;
+  color: #888; font-size: 13px;
+  text-transform: uppercase; letter-spacing: 0.02em;
+  line-height: 1.5; margin-bottom: 0;
+}
+
+.seg-dialogue {
+  display: block;
+  padding-left: 22%; padding-right: 18%;
+  color: #ddd; font-size: 13px; line-height: 1.55;
+}
+
+.seg-transition {
+  text-align: right; color: #555; font-size: 13px;
+  margin-top: 10px; margin-bottom: 4px; padding: 1px 0;
+}
+
+#status { font-size: 0.75rem; padding: 8px 20px; border-top: 1px solid #1e1e1e; color: #555; min-height: 32px; display: flex; align-items: center; }
+#status.error { color: #ff6b6b; }
+#status.ok { color: #6bff9e; }
+#progress-bar-wrap { height: 2px; background: #1e1e1e; display: none; }
+#progress-bar { height: 100%; background: #f5c518; transition: width 0.3s; width: 0%; }
+
+.controls { display: flex; gap: 8px; align-items: center; padding: 14px 20px; flex-wrap: wrap; border-top: 1px solid #1e1e1e; }
+.speed-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.speed-label { font-size: 0.65rem; color: #444; text-transform: uppercase; letter-spacing: 0.1em; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+/* Mobile / PWA tweaks */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body { padding-top: calc(36px + env(safe-area-inset-top)); padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 600px) {
+  body { padding: 20px 10px 40px; }
+  .brand-title { font-size: 1.2rem; }
+  .panel { border-radius: 6px; }
+  .panel-body { padding: 12px 14px; }
+  .voices-grid { grid-template-columns: 1fr; max-height: 220px; }
+  #script-display { padding: 16px 14px; height: 50vh; font-size: 12px; }
+  .seg-char-label { padding-left: 20%; }
+  .seg-dialogue { padding-left: 10%; padding-right: 5%; }
+  #nav-bar { padding: 10px 14px; gap: 6px; }
+  #nav-bar button { padding: 6px 10px; font-size: 0.65rem; }
+  .controls { padding: 10px 14px; gap: 6px; }
+  .speed-wrap { margin-left: 0; width: 100%; justify-content: center; margin-top: 4px; }
+  .row { flex-wrap: wrap; }
+  .row input { min-width: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="brand">
+  <div class="brand-sub">In The Zone Studios Presents</div>
+  <div class="brand-title">Script Reader</div>
+  <div class="brand-line"></div>
+</div>
+
+<!-- SETUP -->
+<div class="panel">
+  <div class="panel-header" onclick="togglePanel(this)">
+    <span class="panel-title-text">ElevenLabs Setup <span id="saved-badge" class="saved-badge">✓ saved</span></span>
+    <span class="panel-arrow open">▾</span>
+  </div>
+  <div class="panel-body">
+    <div class="row" style="margin-bottom:8px;">
+      <input type="text" id="api-key" placeholder="ElevenLabs API key...">
+      <button onclick="loadVoices()">Load Voices</button>
+    </div>
+    <p class="hint" style="margin-bottom:10px;">elevenlabs.io → Developers → API Keys → Create Key</p>
+  </div>
+</div>
+
+<!-- GLOBAL STATUS -->
+<div id="global-status" style="width:100%;max-width:720px;font-family:'Courier New',monospace;font-size:0.75rem;min-height:28px;padding:6px 4px;color:#555;"></div>
+
+<!-- UPLOAD -->
+<div class="panel" id="upload-panel">
+  <div class="panel-body" style="padding:16px;">
+    <div id="upload-area">
+      <div class="icon">📄</div>
+      <div>Drop your script PDF here or click to browse</div>
+      <p>Voices are auto-assigned to each character</p>
+      <input type="file" id="file-input" accept=".pdf">
+    </div>
+  </div>
+</div>
+
+<!-- SCRIPT PANEL -->
+<div class="panel" id="script-panel" style="display:none;">
+
+  <!-- VOICES -->
+  <div class="panel-header" onclick="togglePanel(this)">
+    <span class="panel-title-text" id="voices-header-text">Voice Assignments <span class="auto-badge">AUTO</span></span>
+    <span class="panel-arrow open">▾</span>
+  </div>
+  <div class="panel-body" id="voices-body">
+    <div class="narrator-row">
+      <span class="narrator-label">Narrator</span>
+      <select id="narrator-voice" onchange="voiceMap['__narrator__'] = this.value; saveVoiceMap();"></select>
+    </div>
+    <div class="voices-grid" id="voices-grid"></div>
+    <div style="margin-top:10px; display:flex; gap:8px;">
+      <button class="reassign-btn" onclick="autoAssignVoices()">🔀 Re-randomize Voices</button>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div id="nav-bar">
+    <select id="scene-select" onchange="jumpToSceneFromSelect()">
+      <option value="">— jump to scene —</option>
+    </select>
+    <div class="page-jump">
+      <span style="font-size:0.7rem;color:#444;text-transform:uppercase;letter-spacing:0.1em;">Pg</span>
+      <input type="number" id="page-input" min="1" placeholder="1">
+      <button onclick="jumpToPage()">Go</button>
+    </div>
+    <button onclick="prevScene()">◀ Scene</button>
+    <button onclick="nextScene()">Scene ▶</button>
+  </div>
+
+  <!-- DISPLAY -->
+  <div id="script-display"></div>
+
+  <!-- STATUS -->
+  <div id="status">Load a script to begin.</div>
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <button id="play-btn" class="btn-gold" onclick="togglePlayPause()" disabled>▶ Play</button>
+    <button id="stop-btn" onclick="stopPlayback()" disabled>■ Stop</button>
+    <button onclick="resetScript()">↩ New Script</button>
+    <div class="speed-wrap">
+      <span class="speed-label">Speed</span>
+      <input type="range" id="speed-slider" min="0.5" max="2" step="0.05" value="1"
+        style="width:88px;accent-color:#f5c518;" oninput="onSpeedChange()">
+      <span id="speed-label" style="font-size:0.78rem;color:#666;min-width:36px;">1.0×</span>
+    </div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const FEMALE_NAMES = new Set(['MARY','PATRICIA','JENNIFER','LINDA','BARBARA','ELIZABETH','SUSAN','JESSICA','SARAH','KAREN','LISA','NANCY','BETTY','MARGARET','SANDRA','ASHLEY','DOROTHY','KIMBERLY','EMILY','DONNA','MICHELLE','CAROL','AMANDA','MELISSA','DEBORAH','STEPHANIE','REBECCA','SHARON','LAURA','CYNTHIA','KATHLEEN','AMY','ANGELA','SHIRLEY','ANNA','BRENDA','PAMELA','EMMA','NICOLE','HELEN','SAMANTHA','KATHERINE','CHRISTINE','DEBRA','RACHEL','CAROLYN','JANET','CATHERINE','MARIA','HEATHER','DIANE','RUTH','JULIE','JOYCE','VIRGINIA','VICTORIA','KELLY','LAUREN','CHRISTINA','JOAN','EVELYN','OLIVIA','JUDITH','MEGAN','CHERYL','MARTHA','ANDREA','FRANCES','HANNAH','JACQUELINE','ANN','GLORIA','JEAN','KATHRYN','ALICE','TERESA','SARA','JANICE','MARIE','JULIA','GRACE','JUDY','THERESA','ROSE','BEVERLY','DENISE','MARILYN','AMBER','DANIELLE','BRITTANY','DIANA','ABIGAIL','JANE','LORI','TIFFANY','WENDY','LENA','MAYA','SOFIA','CLAIRE','MIA','NATALIE','BROOKE','ALEX','ALEXIS','AUDREY','BETH','BRITTNEY','CAITLIN','CARRIE','CASSANDRA','CASSIE','CHARLENE','CHARLOTTE','CINDY','CRYSTAL','DAPHNE','DARLENE','DAWN','DEANNA','DENA','ELAINE','ELENA','ELISA','ELISE','ELLA','ELLIE','ERICA','ERIN','FAITH','FELICIA','GINA','HAILEY','HOLLY','HOPE','IVY','JASMINE','JENNA','JENNY','JILL','JOANNA','JOANNE','JOSIE','JOY','JUNE','KATE','KATIE','KAY','KAYLA','KIM','KRISTEN','KRISTINA','KRYSTAL','LACEY','LEAH','LESLIE','LILY','LINDA','LISA','LOIS','LOLA','LUCY','LUNA','LYNDA','LYNN','MACKENZIE','MADISON','MANDY','MELANIE','MELODY','MIA','MIRANDA','MOLLY','MORGAN','NAOMI','NATASHA','NORA','PAIGE','PAMELA','PENNY','PHOEBE','PIPER','PRISCILLA','RENEE','RITA','ROBYN','ROXANNE','RUBY','RUTH','SANDY','SELENA','SERENA','SHANNON','SHELBY','SHERRI','SIERRA','STACY','STELLA','SUMMER','TARA','TAYLOR','TINA','TRACY','VALERIE','VANESSA','VERONICA','VIVIAN','WANDA','WHITNEY','ZOE']);
+
+const MALE_NAMES = new Set(['JAMES','JOHN','ROBERT','MICHAEL','WILLIAM','DAVID','RICHARD','JOSEPH','THOMAS','CHARLES','CHRISTOPHER','DANIEL','MATTHEW','ANTHONY','MARK','DONALD','STEVEN','PAUL','ANDREW','JOSHUA','KENNETH','KEVIN','BRIAN','GEORGE','TIMOTHY','RONALD','EDWARD','JASON','JEFFREY','RYAN','JACOB','GARY','NICHOLAS','ERIC','JONATHAN','STEPHEN','LARRY','JUSTIN','SCOTT','BRANDON','BENJAMIN','SAMUEL','RAYMOND','GREGORY','FRANK','ALEXANDER','PATRICK','JACK','DENNIS','JERRY','TYLER','AARON','JOSE','ADAM','NATHAN','HENRY','ZACHARY','DOUGLAS','PETER','KYLE','NOAH','ETHAN','JEREMY','WALTER','CHRISTIAN','KEITH','ROGER','TERRY','AUSTIN','SEAN','GERALD','CARL','HAROLD','DYLAN','ARTHUR','LAWRENCE','JORDAN','JESSE','BRYAN','BILLY','JOE','BRUCE','GABRIEL','LOGAN','ALBERT','WILLIE','ALAN','JUAN','WAYNE','ELIJAH','RANDY','ROY','VINCENT','RALPH','EUGENE','RUSSELL','BOBBY','MASON','PHILIP','LOUIS','LIAM','OLIVER','LUCAS','MASON','CALEB','HUNTER','CARTER','WYATT','JAYDEN','GABRIEL','JULIAN','GAVIN','BRAYDEN','LUKE','EVAN','NICOLAS','ISAAC','ELIJAH','MILES','ELLIOT','LEO','OSCAR','VICTOR','FELIX','ANDY','BARRY','BEN','CALVIN','CHAD','CLIFF','CLINT','CODY','COREY','CRAIG','DALLAS','DANE','DEAN','DEREK','DILLON','DOUGLAS','DREW','DYLAN','EARL','EDGAR','ELI','EMMETT','FINN','FORREST','FRED','FREDDIE','GAGE','GARRETT','GLEN','GRANT','GUS','HANK','HARRIS','HARRY','IAN','IVAN','JAKE','JARED','JAY','JESS','JIM','JIMMY','JOEL','JOHNNY','JON','JONAH','JORGE','KEN','LANCE','LEE','LEVI','LOUIE','MARIO','MAX','MIKE','NICK','NOLAN','OLIVER','PARKER','PHIL','QUINN','RAY','REED','REID','REX','RILEY','ROBIN','RON','ROSS','SAM','SETH','SHAWN','SIMON','SPENCER','THEO','TRAVIS','TREVOR','TREY','TROY','TUCKER','WADE','WARREN','WESTON','ZACH','ZANE']);
+
+function detectGender(charName) {
+  const first = charName.split(/\s+/)[0].toUpperCase().replace(/[^A-Z]/g, '');
+  if (FEMALE_NAMES.has(first)) return 'F';
+  if (MALE_NAMES.has(first)) return 'M';
+  if (/A$|IE$/.test(first) && first.length > 3) return 'F';
+  if (/SON$|MAN$|ER$/.test(first)) return 'M';
+  return 'N';
+}
+
+const KNOWN_FEMALE_VOICES = new Set(['Rachel','Elli','Domi','Bella','Charlotte','Emily','Grace','Freya','Gigi','Glinda','Matilda','Sarah','Alice','Anna','Aria','Dorothy','Lily','Nicole','Nova','River','Serena']);
+const KNOWN_MALE_VOICES = new Set(['Adam','Antoni','Josh','Arnold','Sam','Callum','Patrick','Harry','Liam','Michael','Thomas','Charlie','Clyde','Dave','Ethan','George','James','Jeremy','Joseph','Marcus','Matthew','Paul','Roger','Ryan','Will']);
+
+function classifyVoiceGender(voice) {
+  if (KNOWN_FEMALE_VOICES.has(voice.name)) return 'F';
+  if (KNOWN_MALE_VOICES.has(voice.name)) return 'M';
+  const g = voice.labels?.gender;
+  if (g) {
+    if (/female/i.test(g)) return 'F';
+    if (/male/i.test(g)) return 'M';
+  }
+  return 'N';
+}
+
+let allVoices = [], femaleVoices = [], maleVoices = [], neutralVoices = [];
+let segments = [], scenes = [], characters = [], charGenders = {}, voiceMap = {};
+let currentSegIdx = 0, isPlaying = false, paused = false, stopped = false;
+let currentAudio = null, playSession = 0;
+
+window.addEventListener('load', () => {
+  const key = localStorage.getItem('el_api_key');
+  if (key) { document.getElementById('api-key').value = key; document.getElementById('saved-badge').style.display = 'inline'; loadVoices(true); }
+  const spd = localStorage.getItem('el_speed');
+  if (spd) { document.getElementById('speed-slider').value = spd; document.getElementById('speed-label').textContent = parseFloat(spd).toFixed(2) + '×'; }
+});
+
+function togglePanel(header) {
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector('.panel-arrow');
+  body.classList.toggle('collapsed');
+  arrow.classList.toggle('open', !body.classList.contains('collapsed'));
+}
+
+async function loadVoices(silent = false) {
+  const key = document.getElementById('api-key').value.trim();
+  if (!key) { setStatus('Paste your API key first.', 'error'); return; }
+  localStorage.setItem('el_api_key', key);
+  document.getElementById('saved-badge').style.display = 'inline';
+  if (!silent) setStatus('Loading voices...', '');
+  try {
+    const res = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } });
+    if (!res.ok) { const t = await res.text(); setStatus(`API error ${res.status}: ${t}`, 'error'); return; }
+    const data = await res.json();
+    allVoices = data.voices;
+    femaleVoices = allVoices.filter(v => classifyVoiceGender(v) === 'F');
+    maleVoices = allVoices.filter(v => classifyVoiceGender(v) === 'M');
+    neutralVoices = allVoices.filter(v => classifyVoiceGender(v) === 'N');
+    if (femaleVoices.length === 0) femaleVoices = allVoices.slice(0, Math.ceil(allVoices.length / 2));
+    if (maleVoices.length === 0) maleVoices = allVoices.slice(Math.ceil(allVoices.length / 2));
+    if (!silent) setStatus(`✓ ${allVoices.length} voices loaded (${femaleVoices.length}F · ${maleVoices.length}M). Upload a script.`, 'ok');
+    else setStatus(`✓ Ready — ${allVoices.length} voices loaded.`, 'ok');
+    if (characters.length > 0) autoAssignVoices();
+  } catch(e) { setStatus(`Network error: ${e.message}`, 'error'); }
+}
+
+function pickVoice(gender, usedIds) {
+  let pool = gender === 'F' ? femaleVoices : gender === 'M' ? maleVoices : [];
+  if (pool.length === 0) pool = neutralVoices.length > 0 ? neutralVoices : allVoices;
+  const unused = pool.filter(v => !usedIds.has(v.voice_id));
+  const candidates = unused.length > 0 ? unused : pool;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function autoAssignVoices() {
+  if (allVoices.length === 0) return;
+  voiceMap = {};
+  const usedIds = new Set();
+  const narratorPool = maleVoices.length > 0 ? maleVoices : allVoices;
+  const narrator = narratorPool[Math.floor(Math.random() * narratorPool.length)];
+  voiceMap['__narrator__'] = narrator.voice_id;
+  usedIds.add(narrator.voice_id);
+  for (const c of characters) {
+    const gender = charGenders[c] || 'N';
+    const voice = pickVoice(gender, usedIds);
+    if (voice) {
+      voiceMap[c] = voice.voice_id;
+      if (allVoices.length > characters.length) usedIds.add(voice.voice_id);
+    }
+  }
+  saveVoiceMap();
+  renderVoicePanel();
+}
+
+function renderVoicePanel() {
+  if (allVoices.length === 0) return;
+  const opts = allVoices.map(v => `<option value="${v.voice_id}">${v.name}</option>`).join('');
+  const ns = document.getElementById('narrator-voice');
+  ns.innerHTML = opts;
+  ns.value = voiceMap['__narrator__'] || allVoices[0]?.voice_id;
+  ns.onchange = () => { voiceMap['__narrator__'] = ns.value; saveVoiceMap(); };
+  const grid = document.getElementById('voices-grid');
+  grid.innerHTML = '';
+  for (const c of characters) {
+    const lineCount = segments.filter(s => s.character === c).length;
+    const gender = charGenders[c] || 'N';
+    const gLabel = gender === 'F' ? 'F' : gender === 'M' ? 'M' : '?';
+    const div = document.createElement('div');
+    div.className = 'voice-row';
+    div.innerHTML = `
+      <span class="char-name" title="${c}">${c}</span>
+      <span class="char-gender ${gender}">${gLabel}</span>
+      <span class="char-lines">${lineCount}×</span>
+      <select onchange="voiceMap['${c.replace(/'/g,"\\'")}'] = this.value; saveVoiceMap();">
+        ${opts}
+      </select>`;
+    const sel = div.querySelector('select');
+    sel.value = voiceMap[c] || '';
+    grid.appendChild(div);
+  }
+}
+
+function saveVoiceMap() { localStorage.setItem('el_voice_map', JSON.stringify(voiceMap)); }
+
+const uploadArea = document.getElementById('upload-area');
+const fileInput = document.getElementById('file-input');
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+uploadArea.addEventListener('drop', e => { e.preventDefault(); uploadArea.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+async function handleFile(file) {
+  if (!file || file.type !== 'application/pdf') { alert('Please upload a PDF.'); return; }
+  setStatus('Extracting text...', '');
+  try {
+    const ab = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    const rawLines = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const lineMap = new Map();
+      for (const item of content.items) {
+        if (!item.str) continue;
+        const y = Math.round(item.transform[5]);
+        if (!lineMap.has(y)) lineMap.set(y, { items: [], minX: Infinity });
+        lineMap.get(y).items.push(item);
+        lineMap.get(y).minX = Math.min(lineMap.get(y).minX, item.transform[4]);
+      }
+      const sortedYs = Array.from(lineMap.keys()).sort((a,b) => b - a);
+      for (const y of sortedYs) {
+        const { items } = lineMap.get(y);
+        const sorted = items.sort((a,b) => a.transform[4] - b.transform[4]);
+        let text = '', lastX = null, lastW = 0;
+        for (const item of sorted) {
+          const x = item.transform[4], fs = Math.abs(item.transform[3]) || 12;
+          if (lastX !== null && (x - (lastX + lastW)) > fs * 0.4) text += ' ';
+          text += item.str; lastX = x; lastW = item.width || 0;
+        }
+        const t = text.trim();
+        if (t) rawLines.push({ text: t, page: p, x: lineMap.get(y).minX });
+      }
+      rawLines.push({ text: '', page: p, x: 0 });
+    }
+    const words = rawLines.map(l=>l.text).join(' ').split(/\s+/);
+    const avgLen = words.reduce((s,w)=>s+w.length,0) / (words.length||1);
+    if (avgLen < 2) rawLines.forEach(l => { l.text = l.text.replace(/([a-zA-Z]) ([a-zA-Z])/g,'$1$2'); });
+
+    const xCounts = {};
+    for (const l of rawLines) {
+      if (!l.text) continue;
+      const rx = Math.round(l.x / 8) * 8;
+      xCounts[rx] = (xCounts[rx] || 0) + 1;
+    }
+    const xEntries = Object.entries(xCounts).sort((a,b)=>b[1]-a[1]);
+    const leftMarginX = xEntries.length > 0 ? parseFloat(xEntries[0][0]) : 72;
+    parseAndRender(rawLines, pdf.numPages, leftMarginX);
+  } catch(e) { console.error(e); setStatus('Parse error: ' + e.message, 'error'); }
+}
+
+function parseAndRender(rawLines, totalPages, leftMarginX) {
+  segments = []; scenes = []; characters = []; charGenders = {};
+  const charCounts = {};
+  const indentThreshold = Math.max(leftMarginX + 60, 120);
+  let i = 0;
+  while (i < rawLines.length) {
+    const { text, page, x } = rawLines[i];
+    if (!text.trim()) { i++; continue; }
+    const t = text.trim();
+    if (/^\d+\.?$/.test(t)) { i++; continue; }
+    if (/^(INT\.|EXT\.|INT\/EXT\.|I\/E\.)/i.test(t)) {
+      scenes.push({ text: t, segIdx: segments.length, page });
+      segments.push({ type: 'scene', text: t, page, sceneIdx: scenes.length - 1 });
+      i++; continue;
+    }
+    const isAllCaps = t === t.toUpperCase() && /[A-Z]/.test(t);
+    if (isAllCaps && /^(FADE|CUT TO|SMASH CUT|MATCH CUT|DISSOLVE|THE END|TITLE CARD|SUPER:)/.test(t)) {
+      segments.push({ type: 'transition', text: t, page });
+      i++; continue;
+    }
+    const isIndented = (x || 0) >= indentThreshold;
+    if (isAllCaps && t.length <= 45 && isIndented && !/^\(/.test(t) && !/^(INT\.|EXT\.)/i.test(t)) {
+      const charName = t.replace(/\s*\(.*?\)\s*$/, '').trim();
+      i++;
+      let dlg = [];
+      while (i < rawLines.length) {
+        const dl = rawLines[i].text.trim();
+        if (!dl) {
+          let j = i + 1;
+          while (j < rawLines.length && !rawLines[j].text.trim()) j++;
+          if (j >= rawLines.length) { i = j; break; }
+          const nextText = rawLines[j].text.trim();
+          const nextX = rawLines[j].x || 0;
+          const nextAllCaps = nextText === nextText.toUpperCase() && /[A-Z]/.test(nextText) && nextText.length <= 45;
+          const nextIndented = nextX >= indentThreshold;
+          if (!nextIndented || /^(INT\.|EXT\.)/i.test(nextText)) { i = j; break; }
+          if (nextAllCaps && nextIndented) { i = j; break; }
+          i = j; continue;
+        }
+        const dlAllCaps = dl === dl.toUpperCase() && /[A-Z]/.test(dl) && dl.length <= 45;
+        const dlX = rawLines[i].x || 0;
+        const dlIndented = dlX >= indentThreshold;
+        if (dlAllCaps && dlIndented && !/^\(/.test(dl) && !/^(INT\.|EXT\.)/i.test(dl)) break;
+        if (/^(INT\.|EXT\.)/i.test(dl)) break;
+        if (!dlIndented && !dl.startsWith('(')) break;
+        if (!dl.startsWith('(')) dlg.push(dl);
+        i++;
+      }
+      if (dlg.length > 0) {
+        charCounts[charName] = (charCounts[charName] || 0) + 1;
+        segments.push({ type: 'dialogue', character: charName, text: dlg.join(' '), page });
+      } else {
+        segments.push({ type: 'action', text: t, page });
+      }
+      continue;
+    }
+    segments.push({ type: 'action', text: t, page });
+    i++;
+  }
+  characters = Object.keys(charCounts).sort((a,b) => charCounts[b] - charCounts[a]);
+  for (const c of characters) charGenders[c] = detectGender(c);
+  renderScriptDisplay();
+  populateSceneSelect();
+  document.getElementById('page-input').max = totalPages;
+  if (allVoices.length > 0) autoAssignVoices();
+  else renderVoicePanel();
+  document.getElementById('upload-panel').style.display = 'none';
+  document.getElementById('script-panel').style.display = 'block';
+  document.getElementById('play-btn').disabled = false;
+  setStatus(`${totalPages}pp · ${segments.length} segs · ${characters.length} characters · voices auto-assigned`, 'ok');
+}
+
+function renderScriptDisplay() {
+  const display = document.getElementById('script-display');
+  display.innerHTML = '';
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i];
+    const div = document.createElement('div');
+    div.id = 'seg-' + i; div.dataset.idx = i;
+    div.onclick = () => { jumpToSegment(i, true); };
+    if (s.type === 'dialogue') {
+      div.className = 'seg seg-dialogue-block';
+      div.innerHTML = `<span class="seg-char-label">${s.character}</span><span class="seg-dialogue">${s.text}</span>`;
+    } else {
+      div.className = 'seg seg-' + s.type;
+      div.textContent = s.text;
+    }
+    display.appendChild(div);
+  }
+}
+
+function highlightSeg(idx) {
+  document.querySelectorAll('.seg.active').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('seg-' + idx);
+  if (el) { el.classList.add('active'); el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+}
+
+function populateSceneSelect() {
+  const sel = document.getElementById('scene-select');
+  sel.innerHTML = '<option value="">— jump to scene —</option>';
+  for (let i = 0; i < scenes.length; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${i+1}. ${scenes[i].text.substring(0,55)}${scenes[i].text.length>55?'…':''}`;
+    sel.appendChild(opt);
+  }
+}
+
+function jumpToSceneFromSelect() {
+  const sel = document.getElementById('scene-select');
+  if (sel.value === '') return;
+  jumpToSegment(scenes[parseInt(sel.value)].segIdx);
+}
+
+function jumpToPage() {
+  const p = parseInt(document.getElementById('page-input').value);
+  if (!p) return;
+  const seg = segments.findIndex(s => s.page >= p);
+  if (seg >= 0) jumpToSegment(seg);
+}
+
+function jumpToSegment(idx, forcePlay = false) {
+  currentSegIdx = idx;
+  highlightSeg(idx);
+  if (isPlaying || forcePlay) {
+    stopped = true;
+    if (currentAudio) currentAudio.pause();
+    paused = false;
+    playSession++;
+    const mySession = playSession;
+    setTimeout(() => {
+      if (playSession !== mySession) return;
+      stopped = false; isPlaying = true;
+      document.getElementById('play-btn').textContent = '⏸ Pause';
+      document.getElementById('stop-btn').disabled = false;
+      document.getElementById('progress-bar-wrap').style.display = 'block';
+      playFromCurrent();
+    }, 120);
+  }
+}
+
+function prevScene() {
+  const cur = segments[currentSegIdx];
+  let targetScene = cur?.sceneIdx !== undefined ? cur.sceneIdx - 1 : -1;
+  if (targetScene < 0) for (let i = currentSegIdx; i >= 0; i--) { if (segments[i].type==='scene') { targetScene = segments[i].sceneIdx - 1; break; } }
+  if (targetScene >= 0 && scenes[targetScene]) jumpToSegment(scenes[targetScene].segIdx);
+}
+
+function nextScene() {
+  for (let i = currentSegIdx + 1; i < segments.length; i++) {
+    if (segments[i].type === 'scene') { jumpToSegment(i); return; }
+  }
+}
+
+function getVoiceForSeg(seg) {
+  if (seg.type === 'dialogue' && seg.character) return voiceMap[seg.character] || voiceMap['__narrator__'] || allVoices[0]?.voice_id || '';
+  return voiceMap['__narrator__'] || allVoices[0]?.voice_id || '';
+}
+
+async function fetchAudio(text, voiceId) {
+  const key = document.getElementById('api-key').value.trim();
+  if (!voiceId) throw new Error('No voice assigned. Load voices first.');
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    method: 'POST',
+    headers: { 'xi-api-key': key, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+    body: JSON.stringify({ text, model_id: 'eleven_turbo_v2_5', voice_settings: { stability: 0.4, similarity_boost: 0.75 } })
+  });
+  if (!res.ok) { const e = await res.text(); throw new Error(`ElevenLabs ${res.status}: ${e}`); }
+  return URL.createObjectURL(await res.blob());
+}
+
+function togglePlayPause() {
+  if (!isPlaying && !paused) { startPlayback(); }
+  else if (isPlaying) {
+    paused = true; isPlaying = false;
+    if (currentAudio) currentAudio.pause();
+    document.getElementById('play-btn').textContent = '▶ Play';
+    setStatus('Paused.', '');
+  } else if (paused) {
+    paused = false; isPlaying = true;
+    if (currentAudio) { currentAudio.playbackRate = getSpeed(); currentAudio.play(); }
+    document.getElementById('play-btn').textContent = '⏸ Pause';
+  }
+}
+
+async function startPlayback() {
+  if (!segments.length) { setStatus('Load a script first.', 'error'); return; }
+  if (!document.getElementById('api-key').value.trim()) { setStatus('Paste your API key.', 'error'); return; }
+  stopped = false; paused = false; isPlaying = true;
+  document.getElementById('play-btn').textContent = '⏸ Pause';
+  document.getElementById('stop-btn').disabled = false;
+  document.getElementById('progress-bar-wrap').style.display = 'block';
+  await playFromCurrent();
+}
+
+function buildUtterance(i) {
+  const seg = segments[i];
+  if (seg.type === 'dialogue' || seg.type === 'scene' || seg.type === 'transition') {
+    return { text: seg.text, voiceId: getVoiceForSeg(seg), endIdx: i };
+  }
+  const voiceId = getVoiceForSeg(seg);
+  let text = seg.text.trimEnd();
+  let j = i + 1;
+  while (j < segments.length) {
+    if (/[.!?]['""”]?$/.test(text)) break;
+    const next = segments[j];
+    if (next.type !== 'action') break;
+    text = text.trimEnd() + ' ' + next.text.trim();
+    j++;
+  }
+  return { text, voiceId, endIdx: j - 1 };
+}
+
+async function playFromCurrent() {
+  playSession++;
+  const mySession = playSession;
+  let i = currentSegIdx;
+  while (i < segments.length && segments[i].type === 'transition') i++;
+  if (i >= segments.length) return;
+  let utt = buildUtterance(i);
+  let prefetchPromise = fetchAudio(utt.text, utt.voiceId).catch(e => ({ error: e }));
+  while (i < segments.length) {
+    if (playSession !== mySession) return;
+    if (stopped || paused) { currentSegIdx = i; break; }
+    const seg = segments[i];
+    if (seg.type === 'transition') { i++; continue; }
+    utt = buildUtterance(i);
+    currentSegIdx = i;
+    highlightSeg(i);
+    if (seg.page) document.getElementById('page-input').value = seg.page;
+    document.getElementById('progress-bar').style.width = Math.round((i/segments.length)*100) + '%';
+    const who = seg.type === 'dialogue' ? seg.character : 'narrator';
+    setStatus(`Page ${seg.page} · ${who} · ${i+1}/${segments.length}`, '');
+    const result = await prefetchPromise;
+    if (playSession !== mySession) return;
+    if (result && result.error) {
+      setStatus(`Error: ${result.error.message}`, 'error');
+      isPlaying = false; document.getElementById('play-btn').textContent = '▶ Play'; return;
+    }
+    const url = result;
+    const nextI = utt.endIdx + 1;
+    if (nextI < segments.length && !stopped && !paused) {
+      const nextUtt = buildUtterance(nextI);
+      prefetchPromise = fetchAudio(nextUtt.text, nextUtt.voiceId).catch(e => ({ error: e }));
+    }
+    if (stopped) { URL.revokeObjectURL(url); break; }
+    try { await playAudio(url); } catch(e) { URL.revokeObjectURL(url); break; }
+    URL.revokeObjectURL(url);
+    i = utt.endIdx + 1;
+    while (i < segments.length && segments[i].type === 'transition') i++;
+  }
+  if (!stopped && !paused) {
+    document.getElementById('progress-bar').style.width = '100%';
+    setStatus('Done.', 'ok');
+    isPlaying = false;
+    document.getElementById('play-btn').textContent = '▶ Play';
+    document.getElementById('stop-btn').disabled = true;
+  }
+}
+
+function playAudio(url) {
+  return new Promise((resolve, reject) => {
+    currentAudio = new Audio(url);
+    currentAudio.playbackRate = getSpeed();
+    const check = setInterval(() => {
+      if (stopped) { clearInterval(check); currentAudio.pause(); resolve(); }
+      if (paused) { clearInterval(check); resolve(); }
+    }, 80);
+    currentAudio.onended = () => { clearInterval(check); resolve(); };
+    currentAudio.onerror = () => { clearInterval(check); reject(new Error('Audio failed')); };
+    currentAudio.play().catch(reject);
+  });
+}
+
+function stopPlayback() {
+  stopped = true; isPlaying = false; paused = false;
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  document.getElementById('play-btn').textContent = '▶ Play';
+  document.getElementById('play-btn').disabled = false;
+  document.getElementById('stop-btn').disabled = true;
+  document.getElementById('progress-bar').style.width = '0%';
+  setStatus('Stopped.', '');
+}
+
+function resetScript() {
+  stopPlayback();
+  segments = []; scenes = []; characters = []; currentSegIdx = 0;
+  document.getElementById('script-display').innerHTML = '';
+  document.getElementById('scene-select').innerHTML = '<option value="">— jump to scene —</option>';
+  document.getElementById('voices-grid').innerHTML = '';
+  document.getElementById('upload-panel').style.display = 'block';
+  document.getElementById('script-panel').style.display = 'none';
+  document.getElementById('play-btn').disabled = true;
+  document.getElementById('progress-bar-wrap').style.display = 'none';
+  fileInput.value = '';
+  setStatus('Load a script to begin.', '');
+}
+
+function onSpeedChange() {
+  const v = parseFloat(document.getElementById('speed-slider').value);
+  document.getElementById('speed-label').textContent = v.toFixed(2) + '×';
+  localStorage.setItem('el_speed', v);
+  if (currentAudio) currentAudio.playbackRate = v;
+}
+function getSpeed() { return parseFloat(document.getElementById('speed-slider').value); }
+function setStatus(msg, type) {
+  const scriptPanel = document.getElementById('script-panel');
+  const isVisible = scriptPanel && scriptPanel.style.display !== 'none';
+  const el = document.getElementById(isVisible ? 'status' : 'global-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = type==='error'?'error':type==='ok'?'ok':'';
+  const ge = document.getElementById('global-status');
+  if (ge && ge !== el) { ge.textContent = msg; ge.className = el.className; }
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(e => console.log('SW registration failed:', e));
+}
+</script>
+</body>
+</html>
